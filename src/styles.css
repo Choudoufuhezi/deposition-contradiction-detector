@@ -40,12 +40,16 @@ h1 {
 }
 
 .transcript-title {
+  display: block;
   margin: 0 0 12px;
   font-size: 1.05rem;
+  font-weight: 700;
 }
 
 .transcript-copy {
-  height: 100%;
+  width: 100%;
+  min-height: 440px;
+  resize: vertical;
   margin: 0;
   padding: 16px;
   overflow-x: auto;
@@ -56,6 +60,11 @@ h1 {
   font-size: 0.75rem;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.transcript-copy:focus {
+  border-color: #64748b;
+  outline: 3px solid #dbeafe;
 }
 
 .analyze-button {
@@ -90,6 +99,18 @@ h1 {
 
 .results {
   margin-top: 24px;
+}
+
+.verification-note {
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: #854d0e;
+  background: #fef9c3;
+  font-size: 0.875rem;
+}
+
+.empty-results {
+  color: #475569;
 }
 
 .result-card {
@@ -130,6 +151,15 @@ h1 {
 
 .claims p:last-child {
   margin-bottom: 0;
+}
+
+.explanation {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  color: #475569;
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 
 @media (max-width: 700px) {

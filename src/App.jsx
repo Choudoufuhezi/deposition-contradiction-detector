@@ -52,43 +52,37 @@ const TYPE_STYLES = {
 };
 
 export default function App() {
+  const [transcript1, setTranscript1] = useState(TRANSCRIPT_1.trim());
+  const [transcript2, setTranscript2] = useState(TRANSCRIPT_2.trim());
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
+  const [rejectedCount, setRejectedCount] = useState(0);
   const [error, setError] = useState(null);
 
   async function analyze() {
     setLoading(true);
     setError(null);
     setResults(null);
+    setRejectedCount(0);
 
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [
-            {
-              role: "user",
-              content: `Find contradictions between these two depositions from the same witness.
-
-Transcript 1: ${TRANSCRIPT_1}
-
-Transcript 2: ${TRANSCRIPT_2}
-
-Return a JSON array of contradictions like: [{claim1, claim2, type, severity}]
-Types: DIRECT, INFERENTIAL, or FALSE_POSITIVE
-Severity: HIGH, MEDIUM, LOW`,
-            },
-          ],
+          transcript1,
+          transcript2,
         }),
       });
 
-      const data = await response.json();
-      const text = data.content[0].text;
-      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      setResults(parsed);
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.error || "The analysis request failed.");
+      }
+
+      setResults(data.findings);
+      setRejectedCount(data.rejectedCount);
     } catch (caughtError) {
       setError(`Failed: ${caughtError.message}`);
     } finally {
@@ -101,11 +95,25 @@ Severity: HIGH, MEDIUM, LOW`,
       <h1>⚖️ Deposition Contradiction Detector</h1>
 
       <section className="transcript-grid" aria-label="Deposition transcripts">
-        <Transcript title="Transcript — March 2023" text={TRANSCRIPT_1} />
-        <Transcript title="Transcript — September 2023" text={TRANSCRIPT_2} />
+        <Transcript
+          id="transcript-1"
+          title="Transcript — March 2023"
+          value={transcript1}
+          onChange={setTranscript1}
+        />
+        <Transcript
+          id="transcript-2"
+          title="Transcript — September 2023"
+          value={transcript2}
+          onChange={setTranscript2}
+        />
       </section>
 
-      <button className="analyze-button" onClick={analyze} disabled={loading}>
+      <button
+        className="analyze-button"
+        onClick={analyze}
+        disabled={loading || !transcript1.trim() || !transcript2.trim()}
+      >
         {loading ? "Analyzing..." : "Find Contradictions"}
       </button>
 
@@ -115,31 +123,48 @@ Severity: HIGH, MEDIUM, LOW`,
         </p>
       )}
 
-      {results && <Results results={results} />}
+      {results && <Results results={results} rejectedCount={rejectedCount} />}
     </main>
   );
 }
 
-function Transcript({ title, text }) {
+function Transcript({ id, title, value, onChange }) {
   return (
     <article>
-      <h2 className="transcript-title">{title}</h2>
-      <pre className="transcript-copy">{text}</pre>
+      <label className="transcript-title" htmlFor={id}>
+        {title}
+      </label>
+      <textarea
+        className="transcript-copy"
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        spellCheck="false"
+      />
     </article>
   );
 }
 
-function Results({ results }) {
+function Results({ results, rejectedCount }) {
   return (
     <section className="results" aria-live="polite">
       <h2>Results ({results.length} found)</h2>
-      {results.map((result, index) => {
+      {rejectedCount > 0 && (
+        <p className="verification-note">
+          {rejectedCount} unverified model {rejectedCount === 1 ? "finding was" : "findings were"}{" "}
+          excluded because the quoted evidence was not found in the transcripts.
+        </p>
+      )}
+      {results.length === 0 && (
+        <p className="empty-results">No verified comparisons were found.</p>
+      )}
+      {results.map((result) => {
         const style = TYPE_STYLES[result.type] ?? TYPE_STYLES.FALSE_POSITIVE;
 
         return (
           <article
             className="result-card"
-            key={`${result.claim1}-${result.claim2}-${index}`}
+            key={result.id}
             style={{ borderLeftColor: style.accent }}
           >
             <div className="result-metadata">
@@ -150,12 +175,13 @@ function Results({ results }) {
             </div>
             <div className="claims">
               <p>
-                <strong>March:</strong> “{result.claim1}”
+                <strong>March:</strong> “{result.evidence1.quote}”
               </p>
               <p>
-                <strong>September:</strong> “{result.claim2}”
+                <strong>September:</strong> “{result.evidence2.quote}”
               </p>
             </div>
+            <p className="explanation">{result.explanation}</p>
           </article>
         );
       })}
