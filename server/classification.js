@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
+// Model-owned fields deliberately exclude `type` and `confidence`. Claude
+// supplies auditable decision inputs; application code derives the final label.
 export const analyzeRequestSchema = z.object({
   transcript1: z.string().trim().min(1, "Transcript 1 is required").max(100_000),
   transcript2: z.string().trim().min(1, "Transcript 2 is required").max(100_000),
@@ -24,6 +26,7 @@ export const candidateResponseSchema = z.object({
   findings: z.array(candidateFindingSchema).max(50),
 });
 
+/** JSON Schema exposed to Claude as a forced client tool. */
 export const reportFindingsTool = {
   name: "report_deposition_findings",
   description:
@@ -81,6 +84,10 @@ export const reportFindingsTool = {
   },
 };
 
+/**
+ * Builds the legal classification prompt and its calibration examples.
+ * Transcript tags delimit user-generated content from application instructions.
+ */
 export function buildPrompt(transcript1, transcript2) {
   return `You are reviewing two legal deposition transcripts from the same witness. Identify material statement pairs and classify each pair as DIRECT, INFERENTIAL, or FALSE_POSITIVE.
 
@@ -135,6 +142,11 @@ ${transcript2}
 </transcript_2>`;
 }
 
+/**
+ * Grounds model quotations against their designated source transcript.
+ * Ungrounded findings are rejected rather than displayed with reduced trust.
+ * Verified offsets support future source highlighting and deterministic scoring.
+ */
 export function verifyFindings(candidates, transcript1, transcript2) {
   const findings = [];
   let rejectedCount = 0;
@@ -189,6 +201,9 @@ function findPrecedingQuestion(transcript, quoteStart) {
   return questions.at(-1)?.[1]?.trim() || null;
 }
 
+// A quote is complete only when it exactly covers the answer on its source line.
+// This is intentionally conservative; multi-line transcript formats may require
+// a richer parser in a future version.
 function isCompleteStatement(quote, transcript, quoteStart) {
   const lineStart = transcript.lastIndexOf("\n", quoteStart) + 1;
   const nextLineBreak = transcript.indexOf("\n", quoteStart);
@@ -197,6 +212,10 @@ function isCompleteStatement(quote, transcript, quoteStart) {
   return normalizeEvidenceQuote(sourceLine) === normalizeEvidenceQuote(quote);
 }
 
+/**
+ * Derives the three-way label from structured decision inputs.
+ * Compatibility takes precedence, followed by inference, then direct conflict.
+ */
 export function deriveClassification(candidate) {
   if (candidate.canBothBeTrue) return "FALSE_POSITIVE";
   if (candidate.requiresExternalInference) return "INFERENTIAL";
@@ -213,6 +232,13 @@ const conservatismRank = {
   FALSE_POSITIVE: 2,
 };
 
+/**
+ * Deduplicates identical evidence pairs and preserves the safer classification
+ * when Claude returns conflicting analyses of the same quotes.
+ *
+ * Conservative order: FALSE_POSITIVE > INFERENTIAL > DIRECT. Per-finding
+ * stability metadata is retained for the confidence rubric.
+ */
 export function consolidateCandidates(candidates) {
   const candidatesByEvidence = new Map();
   let duplicateCount = 0;
@@ -266,6 +292,7 @@ export function consolidateCandidates(candidates) {
   };
 }
 
+/** Extracts and validates the single forced tool-use payload from Claude. */
 export function extractToolInput(apiResponse) {
   const toolUse = apiResponse?.content?.find(
     (block) => block.type === "tool_use" && block.name === reportFindingsTool.name,

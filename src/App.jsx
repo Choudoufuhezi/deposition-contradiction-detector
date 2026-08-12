@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-// Two depositions from the same witness, six months apart.
+// Editable sample evidence lets reviewers exercise the app immediately without
+// requiring a separate fixture upload workflow.
 const TRANSCRIPT_1 = `
 Deposition of Marcus Webb — March 14, 2023
 
@@ -62,6 +63,8 @@ export default function App() {
   const [error, setError] = useState(null);
 
   async function analyze() {
+    // Clear stale findings before each request so an error cannot be mistaken
+    // for a successful analysis of the newly edited transcripts.
     setLoading(true);
     setError(null);
     setResults(null);
@@ -209,6 +212,7 @@ function Results({ results, rejectedCount, duplicateCount, classificationConflic
               </p>
             </div>
             <p className="explanation">{result.explanation}</p>
+            {/* Factors stay collapsed by default to keep the legal evidence primary. */}
             <details className="confidence-details">
               <summary>How confidence was calculated</summary>
               <p className="confidence-disclaimer">

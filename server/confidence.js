@@ -1,5 +1,7 @@
 const COMMON_BASE_SCORE = 50;
 
+// These lexical signals are intentionally small, inspectable heuristics. They
+// modify confidence only; they never override the three-way classification.
 const ABSOLUTE_PATTERNS = [
   /\bnever\b/i,
   /\bno\b/i,
@@ -48,6 +50,14 @@ const MONTHS = {
   december: 12,
 };
 
+/**
+ * Calculates an auditable 0-100 confidence score using transcript-grounded,
+ * deterministic signals. Claude's explanation is never read by this function.
+ *
+ * The shared base avoids treating any classification as inherently more
+ * trustworthy. Evidence can support or weaken the current label, and the final
+ * score is clamped before mapping to HIGH/MEDIUM/LOW thresholds.
+ */
 export function calculateClassificationConfidence(finding) {
   const factors = [];
   const addFactor = (code, label, impact) => factors.push({ code, label, impact });
@@ -187,6 +197,8 @@ function applyTemporalFactor(finding, addFactor) {
     timeTolerance(finding.evidence2.quote),
   );
   const distance = minimumTimeDistance(times1, times2);
+  // A point inside a stated interval is useful evidence for an inferential
+  // timeline conflict (for example, anesthesia from 1-4 vs a 2:30 call).
   const intervalOverlap =
     times1.length >= 2 &&
     times2.some((time) => time >= Math.min(...times1) && time <= Math.max(...times1));
@@ -226,6 +238,8 @@ function extractTimes(text) {
     matches.push(Number(match[1]) * 60 + Number(match[2]));
   }
 
+  // Bare hours are parsed only when introduced by approximation language. This
+  // avoids treating unrelated numbers (dates, quantities, exhibit numbers) as time.
   const qualifiedHourPattern =
     /\b(?:around|about|approximately|maybe)\s+(\d{1,2})(?::(\d{2}))?(?!\s*(?:a\.?m\.?|p\.?m\.?))/gi;
   for (const match of text.matchAll(qualifiedHourPattern)) {
@@ -245,6 +259,7 @@ function toMinutes(hour, minute, meridiem) {
 }
 
 function timeTolerance(text) {
+  // The widest applicable window wins when a quote has multiple qualifiers.
   if (/\b(?:maybe|might|i think)\b/i.test(text)) return 45;
   if (/\b(?:around|about|approximately)\b/i.test(text)) return 30;
   return 15;

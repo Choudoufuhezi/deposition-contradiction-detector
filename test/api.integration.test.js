@@ -4,6 +4,8 @@ import request from "supertest";
 import { AnthropicRequestError } from "../server/anthropic.js";
 import { createApp } from "../server/app.js";
 
+// Supertest drives the real Express route while the injected model dependency
+// keeps the suite deterministic, offline, and free of API cost.
 const transcript1 = "Q: Did you sign the agreement?\nA: No. I never signed that agreement.";
 const transcript2 =
   "Q: Whose signature is on the agreement?\nA: Mine. I signed it on June 4.";

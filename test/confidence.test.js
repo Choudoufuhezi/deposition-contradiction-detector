@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { calculateClassificationConfidence } from "../server/confidence.js";
 
+// Hand-authored findings make each rubric input and expected score repeatable.
 function finding(overrides = {}) {
   return {
     type: "DIRECT",

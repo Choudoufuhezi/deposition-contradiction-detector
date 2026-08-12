@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { AnthropicRequestError, callAnthropic } from "../server/anthropic.js";
 
+// These tests inspect the provider request boundary with an injected fetch;
+// neither test sends credentials or traffic to Anthropic.
 test("callAnthropic sends the required authenticated structured-output request", async () => {
   let capturedUrl;
   let capturedOptions;

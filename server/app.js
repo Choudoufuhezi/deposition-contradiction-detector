@@ -13,6 +13,13 @@ import {
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const defaultDistDirectory = path.resolve(directory, "../dist");
 
+/**
+ * Creates the HTTP application without opening a port.
+ *
+ * Dependencies and static-file behavior are injectable to support HTTP-level
+ * integration tests with no real Anthropic traffic. `server/index.js` is the
+ * production entry point that supplies environment configuration and listens.
+ */
 export function createApp({
   callAnthropic = defaultCallAnthropic,
   apiKey = process.env.ANTHROPIC_API_KEY,
@@ -45,6 +52,9 @@ export function createApp({
 
     try {
       const payload = await callAnthropic({ transcript1, transcript2, apiKey, model });
+
+      // The order is deliberate: validate model structure, derive the label,
+      // consolidate duplicates, ground quotes, then compute local confidence.
       const { findings: rawCandidates } = extractToolInput(payload);
       const { candidates, duplicateCount, classificationConflictCount } =
         consolidateCandidates(rawCandidates);
@@ -69,6 +79,8 @@ export function createApp({
       }
 
       if (error instanceof AnthropicRequestError) {
+        // Authentication and provider failures are deliberately normalized so
+        // upstream implementation details are not leaked to browser clients.
         return response.status(502).json({
           error: "The upstream analysis service failed.",
         });
@@ -82,6 +94,8 @@ export function createApp({
   });
 
   if (serveStatic) {
+    // In production the same Express process serves both the API and Vite's
+    // compiled assets. Development uses Vite's /api proxy instead.
     app.use(express.static(distDirectory));
     app.get("/{*path}", (request, response, next) => {
       if (request.path.startsWith("/api/")) return next();

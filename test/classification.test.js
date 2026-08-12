@@ -10,6 +10,8 @@ import {
   verifyFindings,
 } from "../server/classification.js";
 
+// Unit tests isolate deterministic classification, grounding, and consolidation
+// behavior. They do not call Anthropic or make HTTP requests.
 const candidate = {
   topic: "Location",
   severity: "HIGH",

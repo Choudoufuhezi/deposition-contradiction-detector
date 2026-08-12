@@ -1,5 +1,9 @@
 import { buildPrompt, reportFindingsTool } from "./classification.js";
 
+/**
+ * Typed upstream failure used to keep Anthropic response details out of the
+ * public API while preserving status metadata needed for error mapping.
+ */
 export class AnthropicRequestError extends Error {
   constructor(status, retryAfter = null) {
     super(`Anthropic request failed with status ${status}`);
@@ -9,6 +13,13 @@ export class AnthropicRequestError extends Error {
   }
 }
 
+/**
+ * Calls Anthropic's Messages API and forces one structured tool-use response.
+ *
+ * `fetchImpl` is injectable so tests can inspect the outbound request without
+ * making a network call. Confidence is intentionally absent from this request:
+ * it is calculated later by deterministic application code.
+ */
 export async function callAnthropic({
   transcript1,
   transcript2,
@@ -43,6 +54,8 @@ export async function callAnthropic({
     }),
   });
 
+  // Parse even failed responses so the connection can be consumed cleanly, but
+  // never expose the provider's error body to clients.
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {
