@@ -6,6 +6,7 @@ import { ZodError } from "zod";
 import {
   analyzeRequestSchema,
   buildPrompt,
+  consolidateCandidates,
   extractToolInput,
   reportFindingsTool,
   verifyFindings,
@@ -13,7 +14,7 @@ import {
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
-const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
+const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const distDirectory = path.resolve(directory, "../dist");
 
@@ -65,8 +66,16 @@ app.post("/api/analyze", async (request, response) => {
       return response.status(anthropicResponse.status).json({ error: message });
     }
 
-    const { findings: candidates } = extractToolInput(payload);
-    return response.json(verifyFindings(candidates, transcript1, transcript2));
+    const { findings: rawCandidates } = extractToolInput(payload);
+    const { candidates, duplicateCount, classificationConflictCount } =
+      consolidateCandidates(rawCandidates);
+    const verified = verifyFindings(candidates, transcript1, transcript2);
+
+    return response.json({
+      ...verified,
+      duplicateCount,
+      classificationConflictCount,
+    });
   } catch (error) {
     if (error instanceof ZodError) {
       return response.status(400).json({

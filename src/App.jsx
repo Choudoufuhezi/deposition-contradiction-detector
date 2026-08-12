@@ -57,6 +57,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
   const [rejectedCount, setRejectedCount] = useState(0);
+  const [duplicateCount, setDuplicateCount] = useState(0);
+  const [classificationConflictCount, setClassificationConflictCount] = useState(0);
   const [error, setError] = useState(null);
 
   async function analyze() {
@@ -64,6 +66,8 @@ export default function App() {
     setError(null);
     setResults(null);
     setRejectedCount(0);
+    setDuplicateCount(0);
+    setClassificationConflictCount(0);
 
     try {
       const response = await fetch("/api/analyze", {
@@ -83,6 +87,8 @@ export default function App() {
 
       setResults(data.findings);
       setRejectedCount(data.rejectedCount);
+      setDuplicateCount(data.duplicateCount);
+      setClassificationConflictCount(data.classificationConflictCount);
     } catch (caughtError) {
       setError(`Failed: ${caughtError.message}`);
     } finally {
@@ -123,7 +129,14 @@ export default function App() {
         </p>
       )}
 
-      {results && <Results results={results} rejectedCount={rejectedCount} />}
+      {results && (
+        <Results
+          results={results}
+          rejectedCount={rejectedCount}
+          duplicateCount={duplicateCount}
+          classificationConflictCount={classificationConflictCount}
+        />
+      )}
     </main>
   );
 }
@@ -145,7 +158,7 @@ function Transcript({ id, title, value, onChange }) {
   );
 }
 
-function Results({ results, rejectedCount }) {
+function Results({ results, rejectedCount, duplicateCount, classificationConflictCount }) {
   return (
     <section className="results" aria-live="polite">
       <h2>Results ({results.length} found)</h2>
@@ -153,6 +166,16 @@ function Results({ results, rejectedCount }) {
         <p className="verification-note">
           {rejectedCount} unverified model {rejectedCount === 1 ? "finding was" : "findings were"}{" "}
           excluded because the quoted evidence was not found in the transcripts.
+        </p>
+      )}
+      {duplicateCount > 0 && (
+        <p className="verification-note">
+          {duplicateCount} duplicate model {duplicateCount === 1 ? "finding was" : "findings were"}{" "}
+          consolidated
+          {classificationConflictCount > 0
+            ? `, including ${classificationConflictCount} conflicting classification ${classificationConflictCount === 1 ? "that was" : "that were"} resolved conservatively`
+            : ""}
+          .
         </p>
       )}
       {results.length === 0 && (
