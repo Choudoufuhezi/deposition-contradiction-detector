@@ -19,9 +19,7 @@ const directCandidate = {
   claims2: ["signed the agreement"],
   matchedClaim1: "did not sign the agreement",
   matchedClaim2: "signed the agreement",
-  samePredicateOrExplicitOpposite: true,
-  canBothBeTrue: false,
-  requiresExternalInference: false,
+  reasoningBasis: "EXPLICIT_MUTUAL_EXCLUSION",
   explanation: "The witness expressly denies and later admits signing the agreement.",
 };
 
@@ -126,7 +124,7 @@ test("POST /api/analyze normalizes false-positive severity to LOW", async () => 
   const falsePositive = {
     ...directCandidate,
     severity: "HIGH",
-    canBothBeTrue: true,
+    reasoningBasis: "REASONABLY_COMPATIBLE",
     explanation: "Both statements can reasonably be true.",
   };
   const app = testApp(async () => toolResponse([falsePositive]));
@@ -140,14 +138,14 @@ test("POST /api/analyze normalizes false-positive severity to LOW", async () => 
   assert.equal(response.body.findings[0].severity, "LOW");
 });
 
-test("POST /api/analyze prevents distinct predicates from becoming DIRECT", async () => {
+test("POST /api/analyze maps an inference basis without a competing boolean gate", async () => {
   const distinctPredicates = {
     ...directCandidate,
     claims1: ["spoke to another person"],
     claims2: ["was seen", "waved"],
     matchedClaim1: "spoke to another person",
     matchedClaim2: "waved",
-    samePredicateOrExplicitOpposite: false,
+    reasoningBasis: "INFERENCE_REQUIRED",
     explanation: "The evidence concerns different predicates and requires interpretation.",
   };
   const app = testApp(async () => toolResponse([distinctPredicates]));
@@ -163,7 +161,7 @@ test("POST /api/analyze prevents distinct predicates from becoming DIRECT", asyn
 test("POST /api/analyze consolidates conflicting duplicates conservatively", async () => {
   const inferentialCandidate = {
     ...directCandidate,
-    requiresExternalInference: true,
+    reasoningBasis: "INFERENCE_REQUIRED",
     explanation: "An additional inference is required.",
   };
   const app = testApp(async () => toolResponse([directCandidate, inferentialCandidate]));

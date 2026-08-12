@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 // Model-owned fields deliberately exclude `type` and `confidence`. Claude
-// supplies auditable decision inputs; application code derives the final label.
+// selects one semantic basis; application code maps it to the final label.
 export const analyzeRequestSchema = z.object({
   transcript1: z.string().trim().min(1, "Transcript 1 is required").max(100_000),
   transcript2: z.string().trim().min(1, "Transcript 2 is required").max(100_000),
@@ -22,9 +22,12 @@ export const candidateFindingSchema = z
     claims2: z.array(z.string().trim().min(1)).min(1).max(10),
     matchedClaim1: z.string().trim().min(1),
     matchedClaim2: z.string().trim().min(1),
-    samePredicateOrExplicitOpposite: z.boolean(),
-    canBothBeTrue: z.boolean(),
-    requiresExternalInference: z.boolean(),
+    reasoningBasis: z.enum([
+      "EXPLICIT_MUTUAL_EXCLUSION",
+      "UNIVERSAL_CLAIM_VIOLATION",
+      "INFERENCE_REQUIRED",
+      "REASONABLY_COMPATIBLE",
+    ]),
     explanation: z.string().trim().min(1),
   })
   .superRefine((candidate, context) => {
@@ -105,20 +108,16 @@ export const reportFindingsTool = {
               description:
                 "The single atomic claim from claims2 that is being compared. Copy it exactly from claims2.",
             },
-            samePredicateOrExplicitOpposite: {
-              type: "boolean",
+            reasoningBasis: {
+              type: "string",
+              enum: [
+                "EXPLICIT_MUTUAL_EXCLUSION",
+                "UNIVERSAL_CLAIM_VIOLATION",
+                "INFERENCE_REQUIRED",
+                "REASONABLY_COMPATIBLE",
+              ],
               description:
-                "True only when matchedClaim1 and matchedClaim2 assert the same precise action or state, or explicit logical opposites. False for merely related predicates.",
-            },
-            canBothBeTrue: {
-              type: "boolean",
-              description:
-                "True when an ordinary reasonable interpretation allows both quoted witness statements to be true.",
-            },
-            requiresExternalInference: {
-              type: "boolean",
-              description:
-                "True when incompatibility depends on an unstated fact, causal rule, timeline implication, specialized knowledge, or common-sense assumption.",
+                "The single semantic reason governing classification. Select exactly one basis after applying compatibility, direct-conflict, and inference checks in order.",
             },
             explanation: { type: "string" },
           },
@@ -131,9 +130,7 @@ export const reportFindingsTool = {
             "claims2",
             "matchedClaim1",
             "matchedClaim2",
-            "samePredicateOrExplicitOpposite",
-            "canBothBeTrue",
-            "requiresExternalInference",
+            "reasoningBasis",
             "explanation",
           ],
         },
@@ -159,18 +156,16 @@ Determine whether both statements concern the same person, event, relevant time,
 Ask whether a reasonable interpretation allows both statements to be true. Account for qualifiers such as "around", "about", "maybe", "might", "I think", and "I don't remember exactly". Also account for differences in the asserted predicate or scope. Test compatibility before considering any implication: if one statement concerns a specific room, person, action, or relationship while the other concerns a broader place or a related but different action, do not silently expand either claim. Knowledge of, presence in, or travel through a broad geographic area does not imply knowledge of every specific building, address, room, or sub-location within it. A statement about a specific place and a statement about its broader containing area are compatible unless both statements explicitly identify the same location or add another express conflict. If an ordinary interpretation allows both statements to be true, classify the candidate as FALSE_POSITIVE and stop. Do not continue searching for an implied conflict based on tone, impression, assumed intent, general familiarity, or a broader meaning suggested by the question.
 
 3. DIRECT CONTRADICTION CHECK
-Classify as DIRECT only when the witness statements themselves assert mutually exclusive facts about the same proposition and no additional fact, causal rule, specialized knowledge, or common-sense assumption is required to see the conflict. The statements must use the same predicate or explicit logical opposites, such as "authorized" versus "did not authorize" or "owned" versus "had no ownership interest." Do not merge different predicates under a broader invented concept such as "contact", "presence", "familiarity", "involvement", or "interaction". Explicit denials or universal terms such as "no", "never", "always", and "the entire time" create a direct contradiction only within the scope of the exact action or state they modify. If the explanation relies on language such as "implies", "requires interpreting", "common-sense inference", or any other unstated bridge, the finding cannot be DIRECT.
+Classify as DIRECT only when the witness statements themselves assert mutually exclusive facts about the same proposition and no additional fact, causal rule, specialized knowledge, or common-sense assumption is required to see the conflict. This includes an express affirmation and denial of the same predicate, and a universal state covering an entire stated period versus an expressly stated event that breaks that state during the period. Do not require identical verbs when the conflict is contained in the statements themselves. Do not merge merely related predicates under a broader invented concept such as "contact", "presence", "familiarity", "involvement", or "interaction". Explicit denials or universal terms such as "no", "never", "always", and "the entire time" create a direct contradiction only within the scope of the exact action, state, or period they modify. If the explanation relies on language such as "implies", "requires interpreting", "common-sense inference", or any other unstated bridge, the finding cannot be DIRECT.
 
 4. INFERENTIAL CONTRADICTION CHECK
-Classify as INFERENTIAL only when each statement can sound consistent in isolation, but they become incompatible after a necessary timeline, causal, physical, or contextual inference. Non-overlapping times are not automatically DIRECT when incompatibility depends on what must have remained true between those times. State the necessary bridge explicitly in the explanation. Do not use INFERENTIAL merely because one statement is hedged or less specific, and do not use it after the compatibility check has found a reasonable way for both statements to be true.
+Classify as INFERENTIAL only when each statement can sound consistent in isolation, but they become incompatible after a necessary timeline, causal, physical, or contextual inference. Non-overlapping times are not automatically DIRECT when incompatibility depends on what must have remained true between those times. When both statements give approximate times for the same event or state transition and the ranges are treated as incompatible, use INFERENCE_REQUIRED because that conclusion requires interpreting both estimates as the same unique event and evaluating their uncertainty ranges. State the necessary bridge explicitly in the explanation. Do not use INFERENTIAL merely because one statement is hedged or less specific, and do not use it after the compatibility check has found a reasonable way for both statements to be true.
 
-Before reporting a candidate, record the decision inputs accurately:
+Before reporting a candidate, record the evidence and one decision basis accurately:
 - claims1 and claims2: decompose each quotation into atomic claims. Each item must contain exactly one narrow action or state. For example, "I did not call her, and I was alone" contains two claims, not one claim about "contact". Never use umbrella concepts such as contact, interaction, presence, familiarity, or involvement unless that exact concept is expressly stated by the witness.
 - matchedClaim1 and matchedClaim2: select exactly one atomic claim from each array for the comparison. Copy each selected string exactly from its claims array. Do not compare an entire multi-claim answer to another entire answer.
-- samePredicateOrExplicitOpposite: true only when matchedClaim1 and matchedClaim2 are the same precise predicate or explicit logical opposites. Related actions, incidental interactions, or different geographic scopes are false.
-- canBothBeTrue: true when an ordinary reasonable interpretation permits both witness statements to be true; otherwise false.
-- requiresExternalInference: true when finding incompatibility requires any unstated fact, causal rule, timeline implication, specialized knowledge, or common-sense assumption; otherwise false.
-The application, not you, derives the final classification from these fields. canBothBeTrue takes priority. A pair cannot be DIRECT when samePredicateOrExplicitOpposite is false. Before submitting, confirm that matchedClaim1 occurs exactly in claims1 and matchedClaim2 occurs exactly in claims2. Do not include a classification label in the explanation.
+- reasoningBasis: select exactly one value. Use EXPLICIT_MUTUAL_EXCLUSION for an express affirmation and denial or other mutually exclusive facts stated on their face. Use UNIVERSAL_CLAIM_VIOLATION when one statement covers an entire stated period or scope and the other expressly describes an exception inside it. Use INFERENCE_REQUIRED only when an unstated timeline, causal, physical, or contextual bridge is necessary. Use REASONABLY_COMPATIBLE whenever an ordinary interpretation permits both statements to be true, including different predicates, geographic scopes, or overlapping approximations.
+The application maps reasoningBasis to the final classification. Before submitting, confirm that matchedClaim1 occurs exactly in claims1 and matchedClaim2 occurs exactly in claims2. Ensure the explanation states the selected basis and does not rely on a different basis. Do not include a classification label in the explanation.
 
 Calibration examples:
 - "I did not authorize the wire transfer" vs "I authorized that wire transfer" => DIRECT, because the same action is expressly denied and affirmed.
@@ -191,8 +186,8 @@ Output requirements:
 - Use the questions as context, but quote the witness statements as evidence.
 - Do not broaden a witness's answer using the wording or implication of a question. Distinguish the action actually denied or affirmed from related but different actions, and distinguish a specific location or relationship from a broader one.
 - In the explanation, identify the decisive wording, relevant scope, qualifier, or required inference that determines the classification.
-- Check that the explanation is logically consistent with the selected type. If the explanation introduces an unstated fact or rule, DIRECT is invalid. If the explanation acknowledges that both statements can reasonably be true, DIRECT and INFERENTIAL are invalid.
-- Audit the explanation before submitting: if it uses "implies", "requires interpreting", "common-sense inference", or a newly invented umbrella predicate, set requiresExternalInference to true or canBothBeTrue to true as appropriate. Never return decision inputs that contradict the explanation.
+- Check that the explanation is logically consistent with reasoningBasis. If it introduces an unstated fact or rule, EXPLICIT_MUTUAL_EXCLUSION and UNIVERSAL_CLAIM_VIOLATION are invalid. If it acknowledges that both statements can reasonably be true, only REASONABLY_COMPATIBLE is valid.
+- Audit the explanation before submitting: if it uses "implies", "requires interpreting", or a necessary common-sense bridge, use INFERENCE_REQUIRED. If it acknowledges that both statements can reasonably be true, use REASONABLY_COMPATIBLE. Never return a reasoningBasis that contradicts the explanation.
 - Do not create a geographic-knowledge conflict by inferring that passing through or recognizing a broad area establishes knowledge of a specific sub-location.
 - Do not invent facts, assume unstated events, or resolve genuine ambiguity against the witness.
 - Severity means potential importance for legal review, not certainty or classification confidence.
@@ -278,15 +273,18 @@ function isCompleteStatement(quote, transcript, quoteStart) {
 }
 
 /**
- * Derives the three-way label from structured decision inputs.
- * Compatibility takes precedence, followed by inference, then direct conflict.
+ * Maps the model's single semantic basis to the public three-way label. Keeping
+ * one source of truth avoids contradictory combinations of overlapping flags.
  */
 export function deriveClassification(candidate) {
-  if (candidate.canBothBeTrue) return "FALSE_POSITIVE";
-  if (!candidate.samePredicateOrExplicitOpposite || candidate.requiresExternalInference) {
-    return "INFERENTIAL";
-  }
-  return "DIRECT";
+  const classificationByBasis = {
+    EXPLICIT_MUTUAL_EXCLUSION: "DIRECT",
+    UNIVERSAL_CLAIM_VIOLATION: "DIRECT",
+    INFERENCE_REQUIRED: "INFERENTIAL",
+    REASONABLY_COMPATIBLE: "FALSE_POSITIVE",
+  };
+
+  return classificationByBasis[candidate.reasoningBasis];
 }
 
 /**

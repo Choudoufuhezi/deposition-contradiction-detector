@@ -22,9 +22,7 @@ const candidate = {
   claims2: ["left home during the evening"],
   matchedClaim1: "remained at home for the entire evening",
   matchedClaim2: "left home during the evening",
-  samePredicateOrExplicitOpposite: true,
-  canBothBeTrue: false,
-  requiresExternalInference: false,
+  reasoningBasis: "UNIVERSAL_CLAIM_VIOLATION",
   explanation: "The statements cannot both be true.",
 };
 
@@ -47,15 +45,16 @@ test("builds a calibrated three-way classification prompt", () => {
   assert.match(prompt, /broad geographic area does not imply knowledge/);
   assert.match(prompt, /municipal complex/);
   assert.match(prompt, /Do not create a geographic-knowledge conflict/);
-  assert.match(prompt, /same predicate or explicit logical opposites/);
+  assert.match(prompt, /universal state covering an entire stated period/);
   assert.match(prompt, /claims1 and claims2/);
   assert.match(prompt, /matchedClaim1 and matchedClaim2/);
   assert.match(prompt, /decompose each quotation into atomic claims/);
-  assert.match(prompt, /cannot be DIRECT when samePredicateOrExplicitOpposite is false/);
+  assert.match(prompt, /select exactly one value/);
+  assert.match(prompt, /UNIVERSAL_CLAIM_VIOLATION/);
   assert.match(prompt, /broader invented concept such as "contact"/);
   assert.match(prompt, /working alone does not expressly deny/);
   assert.match(prompt, /not restarted between the two observations/);
-  assert.match(prompt, /Never return decision inputs that contradict the explanation/);
+  assert.match(prompt, /Never return a reasoningBasis that contradicts the explanation/);
   assert.doesNotMatch(prompt, /Hargrove|Daniel Cho|general anesthesia|neighbor/);
   assert.match(prompt, /classify the candidate as FALSE_POSITIVE and stop/);
   assert.match(prompt, /Return each unique evidence pair at most once/);
@@ -64,48 +63,108 @@ test("builds a calibrated three-way classification prompt", () => {
   assert.match(prompt, /<transcript_2>\nSecond transcript\n<\/transcript_2>/);
 });
 
-test("requires explicit classification decision inputs", () => {
-  const { canBothBeTrue, ...missingDecision } = candidate;
+test("requires one explicit classification basis", () => {
+  const { reasoningBasis, ...missingDecision } = candidate;
   const result = candidateResponseSchema.safeParse({ findings: [missingDecision] });
 
   assert.equal(result.success, false);
 });
 
-test("derives classification deterministically from decision inputs", () => {
+test("maps each reasoning basis deterministically", () => {
   assert.equal(deriveClassification(candidate), "DIRECT");
   assert.equal(
-    deriveClassification({ ...candidate, requiresExternalInference: true }),
+    deriveClassification({ ...candidate, reasoningBasis: "EXPLICIT_MUTUAL_EXCLUSION" }),
+    "DIRECT",
+  );
+  assert.equal(
+    deriveClassification({ ...candidate, reasoningBasis: "INFERENCE_REQUIRED" }),
     "INFERENTIAL",
   );
   assert.equal(
-    deriveClassification({
-      ...candidate,
-      canBothBeTrue: true,
-      requiresExternalInference: true,
-    }),
+    deriveClassification({ ...candidate, reasoningBasis: "REASONABLY_COMPATIBLE" }),
     "FALSE_POSITIVE",
-  );
-  assert.equal(
-    deriveClassification({
-      ...candidate,
-      samePredicateOrExplicitOpposite: false,
-      requiresExternalInference: false,
-    }),
-    "INFERENTIAL",
   );
 });
 
-test("requires atomic claims, a matched pair, and the direct-conflict gate", () => {
+test("represents incompatible approximate time estimates with an inference basis", () => {
+  const approximateTimes = {
+    ...candidate,
+    evidence1: { quote: "Around 10, maybe 10:30." },
+    evidence2: { quote: "It was late. Midnight maybe." },
+    matchedClaim1: "fell asleep around 10 or 10:30",
+    matchedClaim2: "fell asleep around midnight",
+    claims1: ["fell asleep around 10 or 10:30"],
+    claims2: ["fell asleep around midnight"],
+    reasoningBasis: "INFERENCE_REQUIRED",
+  };
+
+  assert.equal(deriveClassification(approximateTimes), "INFERENTIAL");
+});
+
+test("represents an explicit denial with the direct mutual-exclusion basis", () => {
+  const explicitDenial = {
+    ...candidate,
+    evidence1: { quote: "I never signed the agreement." },
+    evidence2: { quote: "I signed it at 10:00 a.m." },
+    claims1: ["did not sign the agreement"],
+    claims2: ["signed the agreement"],
+    matchedClaim1: "did not sign the agreement",
+    matchedClaim2: "signed the agreement",
+    reasoningBasis: "EXPLICIT_MUTUAL_EXCLUSION",
+  };
+
+  assert.equal(deriveClassification(explicitDenial), "DIRECT");
+});
+
+test("allows directly exclusive period claims to be DIRECT despite different verbs", () => {
+  assert.equal(deriveClassification(candidate), "DIRECT");
+});
+
+test("maps compatible geographic scopes from their single reasoning basis", () => {
+  const scopedLocation = {
+    ...candidate,
+    evidence1: { quote: "No, never. I don't even know where that is." },
+    evidence2: { quote: "I've driven through that part of town." },
+    claims1: ["did not know where the warehouse was"],
+    claims2: ["drove through that part of town"],
+    matchedClaim1: "did not know where the warehouse was",
+    matchedClaim2: "drove through that part of town",
+    reasoningBasis: "REASONABLY_COMPATIBLE",
+  };
+
+  const result = consolidateCandidates([scopedLocation]);
+
+  assert.equal(result.candidates[0].type, "FALSE_POSITIVE");
+  assert.equal(result.candidates[0].severity, "LOW");
+});
+
+test("maps a broad denial and specific admission from the direct basis", () => {
+  const broadDenial = {
+    ...candidate,
+    evidence1: { quote: "I was never in that industrial area." },
+    evidence2: { quote: "I entered the warehouse." },
+    claims1: ["was never in the industrial area"],
+    claims2: ["entered the warehouse"],
+    matchedClaim1: "was never in the industrial area",
+    matchedClaim2: "entered the warehouse",
+    reasoningBasis: "EXPLICIT_MUTUAL_EXCLUSION",
+  };
+  const result = consolidateCandidates([broadDenial]);
+
+  assert.equal(result.candidates[0].type, "DIRECT");
+});
+
+test("requires atomic claims, a matched pair, and the reasoning basis", () => {
   const { claims1, ...missingClaims } = candidate;
   const { matchedClaim1, ...missingMatch } = candidate;
-  const { samePredicateOrExplicitOpposite, ...missingGate } = candidate;
+  const { reasoningBasis, ...missingBasis } = candidate;
 
   assert.equal(
     candidateResponseSchema.safeParse({ findings: [missingClaims] }).success,
     false,
   );
   assert.equal(candidateResponseSchema.safeParse({ findings: [missingMatch] }).success, false);
-  assert.equal(candidateResponseSchema.safeParse({ findings: [missingGate] }).success, false);
+  assert.equal(candidateResponseSchema.safeParse({ findings: [missingBasis] }).success, false);
 });
 
 test("requires each selected claim to belong to its atomic claim array", () => {
@@ -119,7 +178,11 @@ test("requires each selected claim to belong to its atomic claim array", () => {
 
 test("normalizes false-positive severity to low", () => {
   assert.equal(
-    deriveSeverity({ ...candidate, severity: "HIGH", canBothBeTrue: true }),
+    deriveSeverity({
+      ...candidate,
+      severity: "HIGH",
+      reasoningBasis: "REASONABLY_COMPATIBLE",
+    }),
     "LOW",
   );
   assert.equal(deriveSeverity(candidate), "HIGH");
@@ -128,7 +191,11 @@ test("normalizes false-positive severity to low", () => {
 test("consolidates duplicate evidence using the more conservative classification", () => {
   const result = consolidateCandidates([
     candidate,
-    { ...candidate, requiresExternalInference: true, explanation: "Inference required." },
+    {
+      ...candidate,
+      reasoningBasis: "INFERENCE_REQUIRED",
+      explanation: "Inference required.",
+    },
   ]);
 
   assert.equal(result.candidates.length, 1);

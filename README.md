@@ -40,26 +40,24 @@ Server post-processing
 ```
 
 Claude does not provide the final confidence score. It also does not provide the final
-classification label directly. Claude returns atomic claims, one matched claim pair, and three
-structured decision inputs:
+classification label directly. Claude returns atomic claims, one matched claim pair, and one
+semantic decision basis:
 
 ```text
 claims1[]
 claims2[]
 matchedClaim1
 matchedClaim2
-samePredicateOrExplicitOpposite
-canBothBeTrue
-requiresExternalInference
+reasoningBasis
 ```
 
-The server derives the label in this order:
+The server maps that single basis to the public label:
 
 ```text
-canBothBeTrue = true                         -> FALSE_POSITIVE
-canBothBeTrue = false + distinct predicates  -> INFERENTIAL
-canBothBeTrue = false + inference required   -> INFERENTIAL
-same/opposite predicate + no inference       -> DIRECT
+EXPLICIT_MUTUAL_EXCLUSION    -> DIRECT
+UNIVERSAL_CLAIM_VIOLATION    -> DIRECT
+INFERENCE_REQUIRED           -> INFERENTIAL
+REASONABLY_COMPATIBLE        -> FALSE_POSITIVE
 ```
 
 ## Run locally

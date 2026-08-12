@@ -1,3 +1,5 @@
+import { hasLocationScopeDifference } from "./evidenceSignals.js";
+
 const COMMON_BASE_SCORE = 50;
 
 // These lexical signals are intentionally small, inspectable heuristics. They
@@ -29,11 +31,6 @@ const HEDGE_PATTERNS = [
   /\bor so\b/i,
   /\bi (?:do not|don't) remember\b/i,
 ];
-
-const BROAD_LOCATION_PATTERN =
-  /\b(?:area|general area|part of town|vicinity|neighbou?rhood|nearby|region)\b/i;
-const SPECIFIC_LOCATION_PATTERN =
-  /\b(?:warehouse|building|office|room|house|store|address|facility|property)\b/i;
 
 const MONTHS = {
   january: 1,
@@ -178,13 +175,6 @@ function hasAbsoluteLanguage(text) {
 
 function countPatternMatches(text, patterns) {
   return patterns.filter((pattern) => pattern.test(text)).length;
-}
-
-function hasLocationScopeDifference(text1, text2) {
-  return (
-    (SPECIFIC_LOCATION_PATTERN.test(text1) && BROAD_LOCATION_PATTERN.test(text2)) ||
-    (BROAD_LOCATION_PATTERN.test(text1) && SPECIFIC_LOCATION_PATTERN.test(text2))
-  );
 }
 
 function applyTemporalFactor(finding, addFactor) {
