@@ -106,13 +106,13 @@ export default function App() {
       <section className="transcript-grid" aria-label="Deposition transcripts">
         <Transcript
           id="transcript-1"
-          title="Transcript — March 2023"
+          title="Transcript 1"
           value={transcript1}
           onChange={setTranscript1}
         />
         <Transcript
           id="transcript-2"
-          title="Transcript — September 2023"
+          title="Transcript 2"
           value={transcript2}
           onChange={setTranscript2}
         />
@@ -161,7 +161,12 @@ function Transcript({ id, title, value, onChange }) {
   );
 }
 
-function Results({ results, rejectedCount, duplicateCount, classificationConflictCount }) {
+function Results({
+  results,
+  rejectedCount,
+  duplicateCount,
+  classificationConflictCount,
+}) {
   return (
     <section className="results" aria-live="polite">
       <h2>Results ({results.length} found)</h2>
@@ -205,10 +210,10 @@ function Results({ results, rejectedCount, duplicateCount, classificationConflic
             </div>
             <div className="claims">
               <p>
-                <strong>March:</strong> “{result.evidence1.quote}”
+                <strong>Transcript 1:</strong> “{result.evidence1.quote}”
               </p>
               <p>
-                <strong>September:</strong> “{result.evidence2.quote}”
+                <strong>Transcript 2:</strong> “{result.evidence2.quote}”
               </p>
             </div>
             <p className="explanation">{result.explanation}</p>

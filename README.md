@@ -10,6 +10,10 @@ The application distinguishes:
 - `INFERENTIAL`: incompatibility requires a necessary timeline, causal, or contextual inference.
 - `FALSE_POSITIVE`: an ordinary interpretation allows both statements to be true.
 
+Severity represents potential legal-review importance, not classification certainty. Claude
+provides severity for actual contradictions; the server always normalizes `FALSE_POSITIVE` to
+`LOW` because a dismissed candidate should not appear as a high-priority contradiction.
+
 This tool supports human legal review. Its results and confidence values are not legal conclusions.
 
 ## Architecture
@@ -36,9 +40,15 @@ Server post-processing
 ```
 
 Claude does not provide the final confidence score. It also does not provide the final
-classification label directly. Claude returns two structured decision inputs:
+classification label directly. Claude returns atomic claims, one matched claim pair, and three
+structured decision inputs:
 
 ```text
+claims1[]
+claims2[]
+matchedClaim1
+matchedClaim2
+samePredicateOrExplicitOpposite
 canBothBeTrue
 requiresExternalInference
 ```
@@ -47,8 +57,9 @@ The server derives the label in this order:
 
 ```text
 canBothBeTrue = true                         -> FALSE_POSITIVE
+canBothBeTrue = false + distinct predicates  -> INFERENTIAL
 canBothBeTrue = false + inference required   -> INFERENTIAL
-canBothBeTrue = false + no inference needed  -> DIRECT
+same/opposite predicate + no inference       -> DIRECT
 ```
 
 ## Run locally
@@ -230,7 +241,8 @@ language, and duplicate stability come from transcript evidence and server-side 
 npm test
 ```
 
-The suite uses Node's built-in test runner:
+The main suite uses Node's built-in test runner. Playwright specs run separately so the two test
+runtimes do not discover each other's files:
 
 - Unit tests cover prompt invariants, schema validation, label derivation, quote grounding,
   duplicate consolidation, time/location heuristics, and confidence thresholds.
@@ -244,6 +256,17 @@ Run a production build check with:
 ```sh
 npm run build
 ```
+
+Run the mocked browser smoke tests with:
+
+```sh
+npx playwright install chromium
+npm run test:e2e
+```
+
+Playwright starts the Vite client and intercepts `/api/analyze` in the browser, so the smoke tests
+cover transcript submission, result rendering, expandable confidence factors, safe errors, and
+button recovery without starting Express or calling Claude.
 
 ## Project structure
 
@@ -262,6 +285,7 @@ test/
   api.integration.test.js  Express endpoint integration tests
   classification.test.js   Classification pipeline unit tests
   confidence.test.js       Confidence rubric unit tests
+  e2e/app.spec.js          Mocked browser workflow smoke tests
 ```
 
 ## Current limitations
@@ -272,7 +296,8 @@ test/
 - Time, date, and location checks are intentionally narrow heuristics, not a general legal NLP
   parser.
 - Confidence weights have not been statistically calibrated against attorney-labeled data.
-- Severity is model-provided review importance and remains separate from classification confidence.
+- Severity for actual contradictions is model-provided review importance and remains separate from
+  classification confidence; false positives are normalized to `LOW`.
 - No authentication, persistent case storage, file upload, OCR, or document-redaction workflow is
   included in this take-home scope.
 

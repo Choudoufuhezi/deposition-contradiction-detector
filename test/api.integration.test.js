@@ -15,6 +15,11 @@ const directCandidate = {
   severity: "HIGH",
   evidence1: { quote: "No. I never signed that agreement." },
   evidence2: { quote: "Mine. I signed it on June 4." },
+  claims1: ["did not sign the agreement"],
+  claims2: ["signed the agreement"],
+  matchedClaim1: "did not sign the agreement",
+  matchedClaim2: "signed the agreement",
+  samePredicateOrExplicitOpposite: true,
   canBothBeTrue: false,
   requiresExternalInference: false,
   explanation: "The witness expressly denies and later admits signing the agreement.",
@@ -115,6 +120,44 @@ test("POST /api/analyze excludes findings whose quotations are not grounded", as
 
   assert.equal(response.body.findings.length, 0);
   assert.equal(response.body.rejectedCount, 1);
+});
+
+test("POST /api/analyze normalizes false-positive severity to LOW", async () => {
+  const falsePositive = {
+    ...directCandidate,
+    severity: "HIGH",
+    canBothBeTrue: true,
+    explanation: "Both statements can reasonably be true.",
+  };
+  const app = testApp(async () => toolResponse([falsePositive]));
+
+  const response = await request(app)
+    .post("/api/analyze")
+    .send({ transcript1, transcript2 })
+    .expect(200);
+
+  assert.equal(response.body.findings[0].type, "FALSE_POSITIVE");
+  assert.equal(response.body.findings[0].severity, "LOW");
+});
+
+test("POST /api/analyze prevents distinct predicates from becoming DIRECT", async () => {
+  const distinctPredicates = {
+    ...directCandidate,
+    claims1: ["spoke to another person"],
+    claims2: ["was seen", "waved"],
+    matchedClaim1: "spoke to another person",
+    matchedClaim2: "waved",
+    samePredicateOrExplicitOpposite: false,
+    explanation: "The evidence concerns different predicates and requires interpretation.",
+  };
+  const app = testApp(async () => toolResponse([distinctPredicates]));
+
+  const response = await request(app)
+    .post("/api/analyze")
+    .send({ transcript1, transcript2 })
+    .expect(200);
+
+  assert.equal(response.body.findings[0].type, "INFERENTIAL");
 });
 
 test("POST /api/analyze consolidates conflicting duplicates conservatively", async () => {

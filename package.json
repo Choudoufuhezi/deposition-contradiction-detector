@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"vite\" \"node --watch server/index.js\"",
+    "dev:client": "vite",
     "build": "vite build",
     "start": "node server/index.js",
     "preview": "vite preview",
-    "test": "node --test"
+    "test": "node --test test/anthropic.test.js test/api.integration.test.js test/classification.test.js test/confidence.test.js",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
@@ -20,6 +22,7 @@
     "react-dom": "latest"
   },
   "devDependencies": {
+    "@playwright/test": "latest",
     "concurrently": "latest",
     "supertest": "latest"
   }
