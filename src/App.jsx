@@ -195,6 +195,10 @@ function Results({ results, rejectedCount, duplicateCount, classificationConflic
                 {result.type}
               </span>
               <span className="severity">Severity: {result.severity}</span>
+              <span className={`confidence confidence-${result.classificationConfidence.level.toLowerCase()}`}>
+                Confidence: {result.classificationConfidence.score} ·{" "}
+                {result.classificationConfidence.level}
+              </span>
             </div>
             <div className="claims">
               <p>
@@ -205,6 +209,24 @@ function Results({ results, rejectedCount, duplicateCount, classificationConflic
               </p>
             </div>
             <p className="explanation">{result.explanation}</p>
+            <details className="confidence-details">
+              <summary>How confidence was calculated</summary>
+              <p className="confidence-disclaimer">
+                Deterministic application score; not supplied by Claude and not a calibrated
+                legal probability.
+              </p>
+              <ul>
+                {result.classificationConfidence.factors.map((factor) => (
+                  <li key={factor.code}>
+                    <span>{factor.label}</span>
+                    <strong className={factor.impact < 0 ? "negative-impact" : "positive-impact"}>
+                      {factor.impact > 0 ? "+" : ""}
+                      {factor.impact}
+                    </strong>
+                  </li>
+                ))}
+              </ul>
+            </details>
           </article>
         );
       })}

@@ -157,6 +157,12 @@ export function verifyFindings(candidates, transcript1, transcript2) {
         startIndex: start1,
         endIndex: start1 + candidate.evidence1.quote.length,
         verified: true,
+        completeStatement: isCompleteStatement(
+          candidate.evidence1.quote,
+          transcript1,
+          start1,
+        ),
+        question: findPrecedingQuestion(transcript1, start1),
       },
       evidence2: {
         transcriptId: "TRANSCRIPT_2",
@@ -164,11 +170,31 @@ export function verifyFindings(candidates, transcript1, transcript2) {
         startIndex: start2,
         endIndex: start2 + candidate.evidence2.quote.length,
         verified: true,
+        completeStatement: isCompleteStatement(
+          candidate.evidence2.quote,
+          transcript2,
+          start2,
+        ),
+        question: findPrecedingQuestion(transcript2, start2),
       },
     });
   }
 
   return { findings, rejectedCount };
+}
+
+function findPrecedingQuestion(transcript, quoteStart) {
+  const beforeQuote = transcript.slice(0, quoteStart);
+  const questions = [...beforeQuote.matchAll(/^Q:\s*(.+)$/gim)];
+  return questions.at(-1)?.[1]?.trim() || null;
+}
+
+function isCompleteStatement(quote, transcript, quoteStart) {
+  const lineStart = transcript.lastIndexOf("\n", quoteStart) + 1;
+  const nextLineBreak = transcript.indexOf("\n", quoteStart);
+  const lineEnd = nextLineBreak === -1 ? transcript.length : nextLineBreak;
+  const sourceLine = transcript.slice(lineStart, lineEnd).replace(/^A:\s*/i, "").trim();
+  return normalizeEvidenceQuote(sourceLine) === normalizeEvidenceQuote(quote);
 }
 
 export function deriveClassification(candidate) {
@@ -204,7 +230,10 @@ export function consolidateCandidates(candidates) {
     const existing = candidatesByEvidence.get(key);
 
     if (!existing) {
-      candidatesByEvidence.set(key, classifiedCandidate);
+      candidatesByEvidence.set(key, {
+        ...classifiedCandidate,
+        stability: { duplicateCount: 0, classificationConflict: false },
+      });
       continue;
     }
 
@@ -214,9 +243,20 @@ export function consolidateCandidates(candidates) {
       classificationConflictCount += 1;
     }
 
-    if (conservatismRank[classifiedCandidate.type] > conservatismRank[existing.type]) {
-      candidatesByEvidence.set(key, classifiedCandidate);
-    }
+    const classificationConflict = existing.type !== classifiedCandidate.type;
+    const selected =
+      conservatismRank[classifiedCandidate.type] > conservatismRank[existing.type]
+        ? classifiedCandidate
+        : existing;
+
+    candidatesByEvidence.set(key, {
+      ...selected,
+      stability: {
+        duplicateCount: existing.stability.duplicateCount + 1,
+        classificationConflict:
+          existing.stability.classificationConflict || classificationConflict,
+      },
+    });
   }
 
   return {

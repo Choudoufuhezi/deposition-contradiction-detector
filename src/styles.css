@@ -141,6 +141,29 @@ h1 {
   font-size: 0.75rem;
 }
 
+.confidence {
+  margin-left: auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.confidence-high {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.confidence-medium {
+  color: #854d0e;
+  background: #fef9c3;
+}
+
+.confidence-low {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
 .claims {
   font-size: 0.875rem;
 }
@@ -162,6 +185,43 @@ h1 {
   line-height: 1.5;
 }
 
+.confidence-details {
+  margin-top: 12px;
+  color: #475569;
+  font-size: 0.8125rem;
+}
+
+.confidence-details summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.confidence-disclaimer {
+  margin: 10px 0;
+}
+
+.confidence-details ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.confidence-details li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.positive-impact {
+  color: #166534;
+}
+
+.negative-impact {
+  color: #b91c1c;
+}
+
 @media (max-width: 700px) {
   .transcript-grid {
     grid-template-columns: 1fr;
@@ -169,5 +229,15 @@ h1 {
 
   .analyze-button {
     width: 100%;
+  }
+
+  .result-metadata {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .confidence {
+    width: 100%;
+    margin-left: 0;
   }
 }
